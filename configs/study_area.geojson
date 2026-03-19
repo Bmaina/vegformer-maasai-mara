@@ -1,0 +1,44 @@
+{
+  "type": "FeatureCollection",
+  "name": "Maasai Mara Ecosystem AOI",
+  "crs": {
+    "type": "name",
+    "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Maasai Mara Ecosystem",
+        "description": "Expanded Maasai Mara ecosystem boundary including the National Reserve, Mara Triangle, and surrounding conservancies (Olare Motorogi, Naboisho, Mara North, Ol Kinyei, Lemek)",
+        "area_km2": 3120,
+        "country": "Kenya",
+        "county": "Narok",
+        "elevation_range_m": "1500-2100",
+        "rainfall_regime": "bimodal",
+        "long_rains": "March-May",
+        "short_rains": "October-December",
+        "vegetation_zones": ["riverine forest", "open grassland", "bushland", "woodland", "shrubland"]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [34.8800, -1.8500],
+          [35.0500, -1.8500],
+          [35.2000, -1.7800],
+          [35.3500, -1.6500],
+          [35.4200, -1.5000],
+          [35.4200, -1.1500],
+          [35.3000, -1.0500],
+          [35.1500, -1.0000],
+          [34.9500, -1.0000],
+          [34.8000, -1.0800],
+          [34.7200, -1.2500],
+          [34.7200, -1.5500],
+          [34.7800, -1.7500],
+          [34.8800, -1.8500]
+        ]]
+      }
+    }
+  ]
+}

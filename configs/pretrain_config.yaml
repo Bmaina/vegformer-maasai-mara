@@ -1,0 +1,185 @@
+# VegFormer — Maasai Mara Ecosystem Configuration
+# =================================================
+
+experiment_name: vegformer-maasai-mara
+run_name: vegformer-mara-v1
+mlflow_uri: http://localhost:5000
+checkpoint_dir: checkpoints/
+
+# Model
+model_config:
+  n_bands: 12
+  n_climate_vars: 4
+  d_model: 448
+  n_heads: 8
+  n_layers: 4
+  n_veg_classes: 8      # see vegetation_classes below
+  n_deg_classes: 4
+  dropout: 0.1
+  max_seq_len: 92
+
+# ---------------------------------------------------------------
+# Maasai Mara Study Area
+# ---------------------------------------------------------------
+study_area: configs/study_area.geojson
+center_lat: -1.4061
+center_lon: 35.1019
+area_name: "Maasai Mara Ecosystem"
+area_km2: 3120
+
+# Sub-regions for stratified sampling
+sub_regions:
+  mara_national_reserve:
+    lat: -1.5167
+    lon: 35.1500
+    description: "Core protected area, open grassland dominates"
+  mara_triangle:
+    lat: -1.3800
+    lon: 35.0200
+    description: "Western sector, heavy wildebeest corridor use"
+  olare_motorogi:
+    lat: -1.2500
+    lon: 35.2500
+    description: "Northern conservancy, mixed bush-grassland"
+  naboisho:
+    lat: -1.2000
+    lon: 35.3500
+    description: "Community conservancy, degradation hotspot"
+  mara_north:
+    lat: -1.1500
+    lon: 35.1000
+    description: "Northern conservancy, Mara River riparian zone"
+  ol_kinyei:
+    lat: -1.5500
+    lon: 35.3000
+    description: "Eastern conservancy, woodland-grassland mosaic"
+
+# ---------------------------------------------------------------
+# Vegetation Classes (Maasai Mara specific)
+# Aligned with published phytosociological surveys of the Mara
+# ---------------------------------------------------------------
+vegetation_classes:
+  0:
+    name: "Riparian forest"
+    description: "Mara & Talek river gallery forest (Acacia xanthophloea, Ficus spp.)"
+    color: "#1a5c1a"
+    braun_blanquet_alliance: "Acacion xanthophloea"
+  1:
+    name: "Open short grassland"
+    description: "Themeda triandra dominated, key wildebeest grazing"
+    color: "#c8e06b"
+    braun_blanquet_alliance: "Themeda-Pennisetum"
+  2:
+    name: "Medium grassland"
+    description: "Hyparrhenia, Digitaria, mixed grasses"
+    color: "#9ab84d"
+    braun_blanquet_alliance: "Hyparrheniion"
+  3:
+    name: "Bushed grassland"
+    description: "Grass-dominated with scattered Acacia shrubs <2m"
+    color: "#b5832a"
+    braun_blanquet_alliance: "Acacio-Themeda"
+  4:
+    name: "Acacia bushland"
+    description: "Acacia drepanolobium, A. gerrardii dominated"
+    color: "#8a6520"
+    braun_blanquet_alliance: "Acacietum drepanolobii"
+  5:
+    name: "Acacia woodland"
+    description: "Open Acacia woodland canopy >30% cover"
+    color: "#4d8c2f"
+    braun_blanquet_alliance: "Acacion tortilis"
+  6:
+    name: "Degraded / bare ground"
+    description: "Overgrazed areas, bare soil, invasive Pennisetum"
+    color: "#d4a76a"
+    braun_blanquet_alliance: "Degradation community"
+  7:
+    name: "Cropland / settlement"
+    description: "Encroachment on ecosystem edges, cultivated land"
+    color: "#4a90c4"
+    braun_blanquet_alliance: "Anthropogenic"
+
+# Degradation trajectory classes
+degradation_classes:
+  0: { name: "Recovering",  description: "NDVI trend positive ≥3 seasons" }
+  1: { name: "Stable",      description: "Within normal inter-annual range" }
+  2: { name: "Degrading",   description: "Sustained decline, bare soil increase" }
+  3: { name: "Collapsed",   description: "Below minimum threshold, compacted soil" }
+
+# ---------------------------------------------------------------
+# GEE Export Settings
+# ---------------------------------------------------------------
+gee_scale: 10
+gee_crs: EPSG:32736        # UTM Zone 36S — appropriate for Mara
+composite_interval_days: 16
+cloud_cover_threshold: 80
+
+# Export period (Sentinel-2 available from 2017 onwards for this AOI)
+sentinel_start: "2017-01-01"
+sentinel_end: "2024-12-31"
+
+# MODIS legacy for weak supervision (back to 2001)
+modis_start: "2001-01-01"
+modis_end: "2017-12-31"
+
+# ---------------------------------------------------------------
+# Mara-specific Seasonal Calendar
+# Important for positional encoding and anomaly detection
+# ---------------------------------------------------------------
+seasons:
+  long_rains:
+    name: "Long rains (Masika)"
+    months: [3, 4, 5]
+    peak_ndvi: true
+    wildebeest: "calving season in Serengeti"
+  dry_season_1:
+    name: "Long dry season"
+    months: [6, 7, 8, 9]
+    peak_ndvi: false
+    wildebeest: "migration peak — Mara crossing July-October"
+  short_rains:
+    name: "Short rains (Vuli)"
+    months: [10, 11, 12]
+    peak_ndvi: true
+    wildebeest: "departure south to Serengeti"
+  dry_season_2:
+    name: "Short dry season"
+    months: [1, 2]
+    peak_ndvi: false
+    wildebeest: "calving in Ndutu, Tanzania"
+
+# ---------------------------------------------------------------
+# Training Settings
+# ---------------------------------------------------------------
+patch_size: 64
+sequence_length: 46
+stride: 32
+train_val_split: 0.85
+test_split: 0.10
+num_workers: 8
+
+# Stage 1: MSM pre-training
+pretrain_lr: 1.0e-4
+pretrain_epochs: 50
+mask_ratio: 0.4
+pretrain_batch_size: 64
+weight_decay: 0.05
+
+# Stage 2: Weak supervision
+weak_lr: 5.0e-5
+weak_epochs: 20
+weak_batch_size: 32
+label_smoothing: 0.1
+
+# Stage 3: Full fine-tuning
+finetune_epochs: 30
+finetune_batch_size: 16
+early_stopping_patience: 10
+deg_loss_weight: 0.5
+risk_loss_weight: 0.3
+
+lr_encoders: 1.0e-5
+lr_fusion: 2.0e-5
+lr_transformer: 2.0e-5
+lr_heads: 1.0e-4
