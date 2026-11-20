@@ -106,7 +106,7 @@ class OpticalEncoder(nn.Module):
     backbone, using its [CLS] token per timestep as the temporal feature.
     """
 
-    def __init__(self, n_bands: int = 12, out_dim: int = 256, n_heads: int = 4):
+    def __init__(self, n_bands: int = 14, out_dim: int = 256, n_heads: int = 4):
         super().__init__()
         # Per-timestep spectral embedding
         self.band_embed = nn.Linear(n_bands, out_dim)
@@ -254,9 +254,9 @@ class VegFormer(nn.Module):
 
     def __init__(
         self,
-        n_bands: int = 12,
+        n_bands: int = 14,
         n_climate_vars: int = 4,
-        d_model: int = 448,
+        d_model: int = 384,
         n_heads: int = 8,
         n_layers: int = 4,
         n_veg_classes: int = 8,
@@ -460,7 +460,7 @@ def build_vegformer(config: dict = None) -> VegFormer:
         model = build_vegformer({'n_layers': 6, 'n_heads': 8})
     """
     defaults = dict(
-        n_bands=12, n_climate_vars=4, d_model=448,
+        n_bands=14, n_climate_vars=4, d_model=384,
         n_heads=8, n_layers=4, n_veg_classes=8,
         n_deg_classes=4, dropout=0.1, max_seq_len=92
     )
@@ -478,7 +478,7 @@ if __name__ == '__main__':
     B, T = 4, 46  # batch=4, 46 timesteps (~2 years)
     dummy_batch = {
         'sar':     torch.randn(B, T, 2),
-        'optical': torch.randn(B, T, 12),
+        'optical': torch.randn(B, T, 14),
         'climate': torch.randn(B, T, 4),
         'dates':   torch.randint(1, 366, (B, T)).float()
     }
