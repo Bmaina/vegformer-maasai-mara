@@ -9,9 +9,18 @@
 
 ---
 
+> **Project status (read first).** This repository contains a working data pipeline and a *self-supervised
+> pre-trained* temporal encoder (Masked Sensor Modeling, MSM). The three task heads (vegetation type,
+> degradation trajectory, risk score) have **not been trained**: no labels have been used, so their outputs
+> are arbitrary and must not be interpreted as predictions. Figures 4 and 6 are kept only as illustrations of
+> the pipeline. Validation against independent data is in `evaluation/`; results will be added to the
+> "Validation" section below once run.
+
+---
+
 ## Overview
 
-VegFormer is a deep learning framework for mapping vegetation dynamics and land degradation across the Maasai Mara ecosystem using multi-sensor satellite time series. The model fuses Sentinel-1 SAR backscatter, Sentinel-2 multispectral imagery, and CHIRPS rainfall data across 137 sixteen-day composites spanning 2019 to 2024, learning to distinguish vegetation types and identify degradation trajectories without requiring hand-labeled training data.
+VegFormer is a deep learning framework for mapping vegetation dynamics and land degradation across the Maasai Mara ecosystem using multi-sensor satellite time series. The model fuses Sentinel-1 SAR backscatter, Sentinel-2 multispectral imagery, and CHIRPS rainfall data across 137 sixteen-day composites spanning 2019 to 2024, learning a label-free temporal representation of vegetation dynamics. Mapping that representation to vegetation types or degradation classes requires labelled or weakly-labelled data and is planned work.
 
 The project builds on prior MODIS NDVI-based vegetation mapping work using Savitzky-Golay smoothing, statistical features, and Braun-Blanquet clustering, and advances it with modern deep learning architectures and self-supervised pre-training — producing richer, more interpretable, and more scalable outputs.
 
@@ -29,15 +38,18 @@ Satellite-based vegetation monitoring offers a scalable alternative, but most ex
 
 ## Where Is the Novelty
 
-This project makes four distinct scientific contributions that advance the state of the art in remote sensing vegetation monitoring.
+VegFormer combines several design choices. None has yet been shown to improve results over simple baselines; the
+`evaluation/` scripts are designed to test them.
 
-**Cross-Modal Attention Fusion.** Rather than concatenating SAR and optical features, which is the standard approach, VegFormer uses bidirectional cross-attention between the SAR and optical encoders. This allows the model to learn when each sensor is more informative — for example, attending more strongly to SAR during cloud-covered periods when optical reflectance is unavailable, and to optical bands during clear dry-season conditions when spectral discrimination is sharpest. The resulting attention weights are fully interpretable and can be visualized per location and timestep.
-
-**Masked Sensor Modeling Pre-training.** Inspired by masked autoencoders (He et al., 2022, CVPR) and BERT-style pre-training (Devlin et al., 2019, NAACL), VegFormer introduces Masked Sensor Modeling — a self-supervised objective where random sensor-timestep blocks are masked across all three modalities simultaneously, and the model learns to reconstruct the masked values from context. This allows pre-training on large volumes of unlabeled satellite data before fine-tuning on scarce field labels. MSM loss dropped from 0.8632 to 0.1041, an 88 percent reduction over 30 epochs.
-
-**Degradation Trajectory Classification.** Most remote sensing land cover products assign static labels such as grassland or bare soil. VegFormer instead classifies ordered temporal trajectories — Recovering, Stable, Degrading, and Collapsed — treating land degradation as a sequence prediction problem rather than a snapshot classification. This temporal framing captures gradual ecological transitions that static models miss entirely.
-
-**Seasonal Fourier Positional Encoding.** Standard transformer positional encodings treat time as a linear sequence. VegFormer encodes time using Fourier features of Julian day with both annual and semi-annual harmonics. The semi-annual component is critical for the Maasai Mara, which experiences a bimodal rainfall regime with long rains from March to May and short rains from October to December — a feature missed by models designed for unimodal temperate climates.
+- **Cross-modal attention between SAR and optical encoders** (instead of concatenation). Hypothesis: optical
+  reconstruction should degrade when SAR is hidden. Test: `evaluation/msm_heldout_eval.py` (cross-modal check).
+- **Masked Sensor Modeling.** Random timesteps are masked independently per sensor and reconstructed
+  (He et al., 2022; Devlin et al., 2019 for the general idea). Test: held-out reconstruction versus
+  interpolation, climatology and a randomly initialised network.
+- **Trajectory-style degradation target (planned).** Degradation is framed as an ordered temporal class
+  (Recovering / Stable / Degrading / Collapsed). Labels are not yet derived; see Limitations.
+- **Seasonal Fourier positional encoding** with annual and semi-annual harmonics, motivated by the bimodal
+  rainfall regime. An ablation against a standard encoding has not been run.
 
 ---
 
@@ -117,6 +129,8 @@ Processing steps applied in sequence: Sentinel-2 cloud masking using Scene Class
 
 ## Dataset Statistics
 
+The split is **temporal**: the same 80 spatial patches appear in train, val and test, covering different time windows. They are therefore 80 locations, not 240 independent samples.
+
 | Split | Timesteps | Period | Patches |
 |-------|-----------|--------|---------|
 | Train | 109 | 2019-01-01 to 2023-10-11 | 80 |
@@ -144,17 +158,16 @@ VegFormer is pre-trained without any labels using the MSM objective. 20 percent 
 **Training curve:**
 
 ```
-Epoch  1  loss=0.8632  (random initialization)
-Epoch  5  loss=0.6201  (learning basic temporal patterns)
-Epoch 10  loss=0.3847  (learning seasonal cycles)
-Epoch 15  loss=0.2103  (learning cross-sensor dependencies)
-Epoch 20  loss=0.1398  (learning fine-grained vegetation dynamics)
-Epoch 24  loss=0.1041  best checkpoint
-Epoch 30  loss=0.1089
+Epoch  1  loss=0.4120
+Epoch  5  loss=0.1882
+Epoch 10  loss=0.1415
+Epoch 15  loss=0.1255
+Epoch 20  loss=0.1123
+Epoch 24  loss=0.1041
+Epoch 30  loss=0.1061   (best checkpoint: epoch 24)
 ```
 
-Three learning phases are visible in the curve. Phase 1 covers epochs 1 to 10 and shows rapid loss reduction as the model learns basic seasonal NDVI cycles and rainfall-greenness lag relationships. Phase 2 covers epochs 10 to 20 with slower improvement as the model learns cross-sensor dependencies including SAR cloud gap compensation and EVI-SAR correlation. Phase 3 covers epochs 20 to 30 with fine-grained adjustment as the learning rate approaches zero.
-
+The curve is the **training** loss from `checkpoints/msm_training_summary.json` (0.412 at epoch 1 to 0.104 at epoch 24, a 75 % reduction). The best checkpoint was selected on training loss, not on held-out data; held-out reconstruction is evaluated in `evaluation/msm_heldout_eval.py`.
 ---
 
 ## Output Maps and Figures
@@ -183,28 +196,26 @@ Left panel shows mean April NDVI averaged across 2019 to 2024. Centre shows mean
 
 ---
 
-### Figure 4 - VegFormer Spatial Prediction Maps
+### Figure 4 - Pipeline illustration only: untrained task heads
 
 ![VegFormer Maps](outputs/maps/vegformer_maps.png)
 
-Three spatial maps produced by VegFormer from self-supervised pre-training on 2019 to 2024 multi-sensor time series. The left panel shows degradation risk score with green indicating low risk and red indicating high risk. The centre panel shows predicted vegetation type using a Braun-Blanquet aligned colour scheme where Acacia bushland at 36 percent and medium grassland at 35 percent dominate. The right panel shows degradation trajectory where 78 percent of patches show a recovering trajectory consistent with post-2022 drought recovery and 15 percent collapsed patches align spatially with the northern conservancy boundaries where agricultural encroachment is most intense.
-
+**Do not interpret.** The risk, vegetation-type and trajectory panels come from task heads that were never trained, so the class shares and values shown are artefacts, not ecological findings. The figure only demonstrates that the pipeline runs end to end.
 ---
 
 ### Figure 5 - MSM Pre-training Loss Curve
 
 ![Training Curve](outputs/maps/msm_training_curve.png)
 
-VegFormer Masked Sensor Modeling pre-training loss over 30 epochs showing 88 percent reduction from 0.8632 to 0.1041. The three shaded phases correspond to learning basic temporal patterns (blue), cross-sensor dependencies (orange), and fine-tuning as the learning rate approaches zero (green). Best checkpoint saved at epoch 24.
+VegFormer Masked Sensor Modeling pre-training loss over 30 epochs from 0.412 to 0.104 (training loss; 75 percent reduction). The three shaded phases correspond to learning basic temporal patterns (blue), cross-sensor dependencies (orange), and fine-tuning as the learning rate approaches zero (green). Best checkpoint saved at epoch 24.
 
 ---
 
-### Figure 6 - UMAP Embedding Visualization
+### Figure 6 - UMAP of embeddings (colours come from untrained heads)
 
 ![UMAP Embeddings](outputs/maps/umap_embeddings.png)
 
-UMAP projection of 384-dimensional VegFormer patch embeddings from all 240 patches. The left panel is coloured by predicted vegetation type and shows loose clusters indicating the model learned to distinguish vegetation types purely from temporal satellite dynamics without any field labels. The right panel is coloured by degradation risk score and shows a spatial gradient from low-risk to high-risk patches in embedding space, confirming the model learned ecologically meaningful representations. Cluster boundaries would sharpen with Braun-Blanquet field label fine-tuning.
-
+UMAP of 384-dimensional patch embeddings (80 locations x 3 time windows, so not 240 independent samples). Colours come from untrained heads and carry no meaning. Whether the embedding separates real land-cover classes is what `evaluation/linear_probe.py` tests.
 ---
 
 ### Interactive Dashboard
@@ -215,74 +226,43 @@ The file at outputs/dashboards/vegformer_mara.html can be opened in any browser 
 
 ## Results Summary
 
-### NDVI Analysis (2019-2024)
+### NDVI analysis (2019-2024), data-derived
 
-Annual mean NDVI ranged from 0.440 to 0.482 across the study period. Peak NDVI of 0.852 was recorded in April 2021 during the long rains. Minimum NDVI of 0.159 occurred during the 2019 dry season. The bimodal signal was confirmed with two NDVI peaks per year corresponding to long rains and short rains. A 2022 anomaly with below-average NDVI is consistent with the East Africa drought documented by FEWS NET.
+Annual mean NDVI ranged from 0.440 to 0.482. Peak NDVI of 0.852 occurred in April 2021 and the minimum of 0.159 in the 2019 dry season. Two NDVI peaks per year are visible, matching the long and short rains. Below-average NDVI in 2022 coincides with the regional drought reported by FEWS NET. These are descriptive statistics of the input data, not model outputs.
 
-### Vegetation Type Distribution
+### Pre-training
 
-| Class | Patches | Coverage |
-|-------|---------|----------|
-| Acacia bushland | 86 | 36% |
-| Medium grassland | 84 | 35% |
-| Cropland / settlement | 31 | 13% |
-| Degraded / bare | 26 | 11% |
-| Bushed grassland | 9 | 4% |
-| Riparian forest | 3 | 1% |
-| Acacia woodland | 1 | 0% |
+Training loss: 0.412 to 0.104 (epoch 24). Spatial coverage: 101,376 valid pixels (85.9 % of the AOI) at 250 m.
 
-The dominance of Acacia bushland at 36 percent and medium grassland at 35 percent is consistent with published land cover maps of the Mara ecosystem (Serneels et al., 2001, International Journal of Remote Sensing). The 24 percent combined coverage of degraded and cropland classes signals significant ecosystem stress at the boundaries.
+### Task-head outputs
 
-### Degradation Trajectory Distribution
+Not reported. Vegetation-type, degradation and risk outputs come from untrained heads (see Project status). An earlier version of this section reported class shares (e.g. 36 % Acacia bushland, 78 % recovering) and linked them to field conditions; those numbers were artefacts of random head weights and have been removed.
 
-| Trajectory | Patches | Coverage |
-|------------|---------|----------|
-| Recovering | 186 | 78% |
-| Collapsed | 37 | 15% |
-| Stable | 12 | 5% |
-| Degrading | 5 | 2% |
+### Validation
 
-The high recovering fraction at 78 percent is consistent with above-average 2024 rainfall following the 2022 drought. The 15 percent collapsed fraction corresponds spatially to the northern conservancy boundaries where agricultural encroachment is most intense, consistent with findings by Homewood et al. (2009, World Development).
-
-### Learned Embeddings
-
-UMAP projection of 240 patch embeddings revealed clear spatial clustering by vegetation type and a visible risk gradient in embedding space. Embedding statistics of mean 0.0001 and standard deviation 0.9971 confirm well-normalized representations from effective pre-training.
-
-### Spatial Coverage
-
-Valid pixels mapped: 101,376 representing 85.9 percent of the AOI. Risk score range: 0.479 to 0.552. Spatial resolution: 250m. Temporal coverage: 6 years from 2019 to 2024.
+| Test | Script | Result |
+|---|---|---|
+| Held-out masked reconstruction vs interpolation, climatology, random-init | `evaluation/msm_heldout_eval.py` | not yet run |
+| Cross-modal check: optical error with SAR visible vs hidden | `evaluation/msm_heldout_eval.py` | not yet run |
+| Linear probe vs reference land cover, spatial block CV, vs hand-crafted features and random-init | `evaluation/linear_probe.py` | not yet run |
 
 ---
 
 ## Value for Decision Makers
 
-### For Conservation Managers (KWS, Conservancy Boards)
-
-The degradation trajectory classification identifies areas transitioning from stable to degrading one to two seasons before visible bare soil appears, enabling proactive intervention. Vegetation type maps identify where open short grassland, which is the key migration grazing habitat, is being replaced by Acacia bushland. The 85.9 percent spatial coverage at 250m resolution replaces dozens of expensive field surveys and frees resources for targeted ground-truthing.
-
-### For County and National Government (Narok County, KFS, NEMA)
-
-The cropland and settlement class at 13 percent of patches directly maps agricultural encroachment for enforcement of protected area boundaries. CHIRPS-integrated risk scores provide a 16-day updated early warning signal for livestock emergency interventions during drought. The collapsed trajectory class identifies the highest-priority areas for active restoration investment.
-
-### For Development Organizations and Funders (USAID, GIZ, WWF)
-
-Risk maps enable geographic targeting of conservation finance to highest-threat areas. Trajectory classification provides a quantitative baseline against which intervention outcomes can be measured over time. The same pipeline can be redeployed across any ecosystem in East Africa by changing only the AOI coordinates.
+Intended uses once validated (not supported by the current results): flagging areas of declining vegetation condition for field checks, mapping cropland encroachment at conservancy edges, and giving drought early-warning context from CHIRPS-linked indicators. Any such use requires labelled validation, calibrated uncertainty and consultation with local managers first.
 
 ---
 
 ## Limitations
 
-### Data Limitations
-
-The 250m resolution is resampled from 10m Sentinel-2 to fit streaming constraints, meaning fine-scale features such as individual trees, small water points, and narrow riparian corridors are lost. April and November 2023 were fully cloud-covered and filled by linear interpolation, carrying higher uncertainty. CHIRPS at 5km assigns a single rainfall value to approximately 400 square kilometres, losing local convective rainfall variability.
-
-### Model Limitations
-
-No field labels were used in pre-training. Vegetation type and degradation labels reflect learned patterns from spectral-temporal dynamics, not validated ecological classifications. Fine-tuning with Braun-Blanquet field data would substantially improve accuracy. Without fine-tuning labels the risk head produces compressed predictions clustered near 0.5 — the relative spatial pattern is meaningful but absolute values are not calibrated. The model uses spatial mean pooling over 64x64 patches, so within-patch heterogeneity is lost. No uncertainty quantification is provided — Monte Carlo Dropout or ensemble methods would add prediction uncertainty important for high-stakes decisions.
-
-### Scope Limitations
-
-Results are specific to the Maasai Mara ecosystem. Transfer to other ecosystems requires re-running the full pipeline with new AOI coordinates and new normalization statistics. The 2019 to 2024 training period excludes the pre-Sentinel-2 era. Integration of MODIS legacy data from 2001 to 2018 as weak supervision is a planned extension.
+**Heads untrained.** Vegetation, degradation and risk outputs are not predictions (see Project status).
+**No held-out evidence yet.** The checkpoint was chosen on training loss; the validation and test windows were not used. Sample size is small: 80 locations, 20 gradient steps per epoch.
+**Spatial averaging.** Each 64x64 patch is averaged to one vector per timestep, so within-patch heterogeneity is lost and the model is trained on patch-mean series.
+**Resolution.** 250 m, resampled from 10 m Sentinel-2. April and November 2023 were fully cloud-covered and filled by linear interpolation. CHIRPS at 5 km assigns one rainfall value to about 400 km².
+**Degradation labels.** The trajectory classes are defined in terms of NDVI trends but no labels have been generated from that rule yet.
+**Embedding statistics.** Embeddings are taken after a LayerNorm, so a mean near 0 and standard deviation near 1 are guaranteed by construction and are not evidence of effective pre-training.
+**Scope.** Results are specific to the Maasai Mara; transfer to other ecosystems is untested. No uncertainty quantification is provided.
 
 ---
 
@@ -326,6 +306,10 @@ vegformer/
 │       └── validate_mara_aoi.py       AOI validation
 ├── visualization/
 │   └── folium_dashboard.py            Interactive map builder
+├── evaluation/
+│   ├── common.py                      Torch-free helpers and baselines
+│   ├── msm_heldout_eval.py            Held-out reconstruction and cross-modal test
+│   └── linear_probe.py                Probe vs reference labels, spatial block CV
 ├── configs/
 │   ├── pretrain_config.yaml           Training configuration
 │   └── study_area.geojson             Maasai Mara AOI boundary
@@ -382,12 +366,12 @@ Higginbottom, T.P., Symeonakis, E. (2014). Assessing land degradation and desert
 
 ```bibtex
 @software{vegformer2026,
-  author    = {Maina, A.},
+  author    = {<TODO: confirm author name>},
   title     = {VegFormer: Cross-Modal Temporal Transformer for Vegetation
                Dynamics and Land Degradation Mapping, Maasai Mara Ecosystem},
   year      = {2026},
   publisher = {GitHub},
-  url       = {https://github.com/yourusername/vegformer-maasai-mara}
+  url       = {https://github.com/Bmaina/vegformer-maasai-mara}
 }
 ```
 

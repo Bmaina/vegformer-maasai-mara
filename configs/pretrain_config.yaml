@@ -1,4 +1,7 @@
 # VegFormer — Maasai Mara Ecosystem Configuration
+# NOTE: values below are the original design targets. The reported pre-training run actually used
+# n_bands=14, d_model=384, max_seq_len=137, mask_ratio=0.2, 30 epochs, batch size 4, lr 1e-4
+# (see checkpoints/msm_training_summary.json). Stages 2-3 (weak supervision, fine-tuning) have NOT been run.
 # =================================================
 
 experiment_name: vegformer-maasai-mara
