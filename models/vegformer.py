@@ -266,6 +266,8 @@ class VegFormer(nn.Module):
     ):
         super().__init__()
         self.d_model = d_model
+        self.n_bands = n_bands
+        self.n_climate_vars = n_climate_vars
 
         # Per-modality encoders
         self.sar_encoder = SAREncoder(in_channels=2, out_dim=128)
@@ -318,6 +320,11 @@ class VegFormer(nn.Module):
 
         # MSM decoder (used during pre-training only)
         self.msm_decoder = nn.Linear(d_model, n_bands + 2 + n_climate_vars)
+
+        # The task heads above are NOT trained by MSM pre-training. Until they
+        # are fine-tuned on labels this stays False and outputs from them are
+        # arbitrary (random-projection) values, not predictions.
+        self.heads_trained = False
 
     def forward(self, batch: dict) -> dict:
         sar = batch['sar']       # (B, T, 2)
@@ -388,8 +395,10 @@ class MaskedSensorModeling(nn.Module):
 
         # Learned mask tokens per modality
         self.sar_mask = nn.Parameter(torch.zeros(1, 1, 2))
-        self.optical_mask = nn.Parameter(torch.zeros(1, 1, 14))
-        self.climate_mask = nn.Parameter(torch.zeros(1, 1, 4))
+        self.n_bands = model.n_bands
+        self.n_climate_vars = model.n_climate_vars
+        self.optical_mask = nn.Parameter(torch.zeros(1, 1, model.n_bands))
+        self.climate_mask = nn.Parameter(torch.zeros(1, 1, model.n_climate_vars))
         nn.init.trunc_normal_(self.sar_mask, std=0.02)
         nn.init.trunc_normal_(self.optical_mask, std=0.02)
         nn.init.trunc_normal_(self.climate_mask, std=0.02)
@@ -419,12 +428,24 @@ class MaskedSensorModeling(nn.Module):
         token_feats = out['token_feats']  # (B, T, d_model)
         recon = self.model.msm_decoder(token_feats)  # (B, T, 18)
 
-        # Compute MSE only at masked positions (per modality)
+        # MSE only on the channels of each sensor, at the timesteps where THAT
+        # sensor was masked. (Previously the loss was taken over every channel
+        # at the union of masked timesteps, so visible channels at those steps
+        # were "reconstructed" trivially and diluted the objective.)
+        n_s, n_o = batch['sar'].shape[-1], batch['optical'].shape[-1]
         target = torch.cat([batch['sar'], batch['optical'], batch['climate']], dim=-1)
+        slices = {'sar': (slice(0, n_s), sar_mask),
+                  'optical': (slice(n_s, n_s + n_o), opt_mask),
+                  'climate': (slice(n_s + n_o, target.shape[-1]), clim_mask)}
+        per_sensor = {}
+        for name, (sl, m) in slices.items():
+            if m.any():
+                per_sensor[name] = F.mse_loss(recon[..., sl][m], target[..., sl][m])
+        loss = torch.stack(list(per_sensor.values())).mean()
         all_mask = sar_mask | opt_mask | clim_mask
-        loss = F.mse_loss(recon[all_mask], target[all_mask])
 
-        return {'loss': loss, 'mask': all_mask, 'recon': recon}
+        return {'loss': loss, 'mask': all_mask, 'recon': recon,
+                'per_sensor_loss': {k: v.detach() for k, v in per_sensor.items()}}
 
 
 # ---------------------------------------------------------------------------

@@ -29,9 +29,7 @@
 #   to confirm class assignments.
 #
 # Degradation trajectory map:
-#   4-class ordered prediction: Recovering / Stable / Degrading / Collapsed.
-#   Spatial patterns are ecologically interpretable — collapsed areas align
-#   with known encroachment zones in northern conservancies.
+#   Output of an UNTRAINED head. Not a prediction; illustrative only.
 #
 # Risk score map:
 #   Continuous [0,1] output from a sigmoid head. Without fine-tuning on
@@ -269,7 +267,7 @@ legend_deg = [Patch(color=DEG_COLORS[i], label=DEG_NAMES[i]) for i in range(4)]
 axes[2].legend(handles=legend_deg, loc='lower left', fontsize=9, framealpha=0.9)
 
 plt.suptitle('VegFormer — Maasai Mara Ecosystem (2019–2024)\n'
-             'Self-supervised pre-training only — no field label fine-tuning',
+             'ILLUSTRATIVE ONLY: task heads untrained, outputs are not predictions',
              fontsize=13)
 plt.tight_layout()
 plt.savefig(str(OUTPUT_DIR / 'maps/vegformer_maps.png'), dpi=150, bbox_inches='tight')
@@ -316,7 +314,7 @@ try:
     plt.colorbar(sc2, ax=axes[1], label='Risk score', shrink=0.8)
 
     plt.suptitle('VegFormer Learned Embeddings — Maasai Mara\n'
-                 'Clusters indicate self-supervised representation learning', fontsize=12)
+                 'Colours come from untrained heads. Illustrative only.', fontsize=12)
     plt.tight_layout()
     plt.savefig(str(OUTPUT_DIR / 'maps/umap_embeddings.png'), dpi=150, bbox_inches='tight')
     plt.show()
@@ -506,7 +504,7 @@ print("\n" + "="*60)
 print("  NOTEBOOK 05 COMPLETE — PROJECT OUTPUTS READY")
 print("="*60)
 print(f"\n  Model:         VegFormer (8.9M params)")
-print(f"  Pre-training:  MSM, 30 epochs, loss 0.8632→0.1041 (88%↓)")
+print(f"  Pre-training:  MSM, 30 epochs, training loss 0.412→0.104")
 print(f"  Coverage:      85.9% of Maasai Mara AOI (101,376 pixels)")
 print(f"  Resolution:    250m spatial, 16-day temporal")
 print(f"  Period:        2019–2024 (137 composites)")
@@ -521,11 +519,6 @@ print(f"\n  Interactive dashboard:")
 print(f"    outputs/dashboards/vegformer_mara.html")
 print(f"      5 basemaps: Google Sat/Hybrid, CartoDB Light/Dark, ESRI")
 print(f"      3 data layers: Risk, Vegetation, Trajectory")
-print(f"\n  Key findings:")
-print(f"    Acacia bushland + medium grassland = 71% of ecosystem")
-print(f"    Degraded/cropland = 24% (ecosystem boundary pressure)")
-print(f"    78% of patches recovering (post-2022 drought)")
-print(f"    15% collapsed (northern conservancy encroachment)")
-print(f"    Bimodal NDVI confirmed (long + short rains)")
-print(f"    2022 drought signal visible in NDVI anomaly")
+print(f"
+  NOTE: veg/degradation/risk heads are untrained; do not report class shares or risk values.")
 print("="*60)
