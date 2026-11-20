@@ -11,9 +11,9 @@ checkpoint_dir: checkpoints/
 
 # Model
 model_config:
-  n_bands: 12
+  n_bands: 14
   n_climate_vars: 4
-  d_model: 448
+  d_model: 384
   n_heads: 8
   n_layers: 4
   n_veg_classes: 8      # see vegetation_classes below
